@@ -39,7 +39,7 @@ async function main() {
   const dashboardDir = path.join(__dirname, "../public/dashboard");
   if (fs.existsSync(dashboardDir)) {
     const indexHtml = fs.readFileSync(path.join(dashboardDir, "index.html"));
-    app.get("/*rest", async (req, reply) => {
+    app.get("/*", async (req, reply) => {
       const url = req.url.split("?")[0];
       const filePath = path.join(dashboardDir, url);
       if (!filePath.startsWith(dashboardDir)) {
