@@ -1,6 +1,8 @@
 import { spawn } from "node:child_process";
-import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
+
+const MIN_CHUNK_BYTES = 2000;
 
 const STORAGE_ROOT = process.env.AUDIO_STORAGE_DIR ?? "/app/data/audio";
 const CHUNK_SECONDS = Number(process.env.AUDIO_CHUNK_SECONDS ?? 600);
@@ -65,7 +67,13 @@ export async function splitIntoChunks(originalPath: string, recordingId: string)
   ]);
 
   const files = (await readdir(dir)).filter((f) => f.startsWith("chunk-")).sort();
-  return files.map((f) => path.join(dir, f));
+  const paths = files.map((f) => path.join(dir, f));
+
+  const sized = await Promise.all(
+    paths.map(async (p) => ({ path: p, size: (await stat(p)).size })),
+  );
+  const meaningful = sized.filter((f) => f.size >= MIN_CHUNK_BYTES).map((f) => f.path);
+  return meaningful.length > 0 ? meaningful : paths;
 }
 
 export async function readAudioBuffer(filePath: string): Promise<Buffer> {

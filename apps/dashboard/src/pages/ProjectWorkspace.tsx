@@ -95,8 +95,9 @@ export default function ProjectWorkspace() {
       recordedBlobRef.current = null;
       setRecorderState("idle");
       load();
-    } catch {
-      setError("Falha ao enviar áudio.");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setError(`Falha ao enviar áudio: ${message}`);
     } finally {
       setUploading(false);
     }
