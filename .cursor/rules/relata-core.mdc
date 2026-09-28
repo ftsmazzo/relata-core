@@ -1,0 +1,7 @@
+---
+description: Regras do projeto relata-core
+globs:
+alwaysApply: true
+---
+
+Fonte única de regras deste projeto: [CLAUDE.md](../../CLAUDE.md). Leia esse arquivo antes de propor qualquer mudança — não duplicar o conteúdo aqui.
