@@ -3,6 +3,7 @@ import cors from "@fastify/cors";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import fs from "node:fs";
+import * as Sentry from "@sentry/node";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import { db } from "./db/client.js";
 import { eq, inArray } from "drizzle-orm";
@@ -16,6 +17,10 @@ import { processRecording } from "./worker/process.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+if (process.env.SENTRY_DSN) {
+  Sentry.init({ dsn: process.env.SENTRY_DSN, tracesSampleRate: 0 });
+}
+
 async function main() {
   const app = Fastify({ logger: true, bodyLimit: 300 * 1024 * 1024 });
 
@@ -23,6 +28,7 @@ async function main() {
 
   app.setErrorHandler((err, _req, reply) => {
     app.log.error(err);
+    if (process.env.SENTRY_DSN) Sentry.captureException(err);
     const e = err as { statusCode?: number; message: string };
     const status = e.statusCode ?? 500;
     reply.code(status).send({ error: status === 500 ? "internal_error" : e.message });

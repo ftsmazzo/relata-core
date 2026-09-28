@@ -1,4 +1,5 @@
 import { eq, and } from "drizzle-orm";
+import * as Sentry from "@sentry/node";
 import { db } from "../db/client.js";
 import { recordings, transcriptChunks, transcripts, briefings, events } from "../db/schema.js";
 import {
@@ -50,6 +51,7 @@ export async function processRecording(recordingId: string) {
 
     await assembleTranscriptAndGenerateBriefing(recordingId);
   } catch (err) {
+    if (process.env.SENTRY_DSN) Sentry.captureException(err);
     const message = err instanceof Error ? err.message : String(err);
     await setStatus(recordingId, "error", message);
     await emitEvent(recording.projectId, recordingId, "status_changed", { status: "error", message });
