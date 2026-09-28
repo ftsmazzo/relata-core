@@ -22,6 +22,7 @@ Parte da mesma suíte do [Annotate](https://github.com/ftsmazzo/annotate-core) �
 - Erros: nunca vazar texto cru de erro de banco pro cliente (`setErrorHandler` genérico).
 - Body limit do Fastify: **já elevado** (300MB) pra caber áudio em base64 — não sobrescrever pra um valor menor.
 - Cuidado com o bug já conhecido no Annotate: **nunca setar `content-type: application/json` num fetch sem body** — o parser do Fastify rejeita JSON declarado vazio.
+- **Nunca volte a mandar o áudio inteiro numa requisição só.** O proxy reverso da VPS (Traefik) corta a conexão em ~60s — confirmado reproduzindo em produção: um POST de 21MB morreu com `499 Client Closed Request` aos 60.8s mesmo com timeout de cliente de 180s. Por isso o upload é em pedaços de 4MB (`POST /api/v1/recordings` cria o registro vazio → `POST /:id/audio-chunk` por pedaço → `POST /:id/complete-upload` fecha e dispara o processamento). Qualquer mudança nesse fluxo precisa manter cada requisição individual pequena o bastante pra nunca chegar perto de 60s numa conexão lenta.
 
 ## Segurança e dados sensíveis
 
