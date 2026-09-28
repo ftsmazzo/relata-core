@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
-import { createRecording, listRecordings, whoami, type Recording } from "../api.js";
+import { createRecordingChunked, listRecordings, whoami, type Recording } from "../api.js";
 import Mark from "../components/Mark.js";
 
 const STATUS_LABEL: Record<string, string> = {
   recording: "Gravando",
+  uploading: "Enviando",
   uploaded: "Na fila",
   transcribing: "Transcrevendo",
   transcribed: "Transcrito",
@@ -23,15 +24,6 @@ function formatTimer(seconds: number): string {
   return `${m}:${s}`;
 }
 
-function fileToBase64(file: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve((reader.result as string).split(",")[1] ?? "");
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-}
-
 export default function ProjectWorkspace() {
   const { slug } = useParams();
   const location = useLocation();
@@ -42,6 +34,7 @@ export default function ProjectWorkspace() {
   const [recorderState, setRecorderState] = useState<"idle" | "recording" | "stopped">("idle");
   const [seconds, setSeconds] = useState(0);
   const [uploading, setUploading] = useState(false);
+  const [uploadPct, setUploadPct] = useState(0);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const recordedBlobRef = useRef<Blob | null>(null);
@@ -88,10 +81,12 @@ export default function ProjectWorkspace() {
 
   async function sendRecording(blob: Blob, source: "live" | "upload", mimeType: string) {
     setUploading(true);
+    setUploadPct(0);
     setError("");
     try {
-      const audioBase64 = await fileToBase64(blob);
-      await createRecording({ source, audioBase64, mimeType });
+      await createRecordingChunked({ source, mimeType, blob }, (sent, total) => {
+        setUploadPct(total > 0 ? Math.round((sent / total) * 100) : 0);
+      });
       recordedBlobRef.current = null;
       setRecorderState("idle");
       load();
@@ -164,6 +159,17 @@ export default function ProjectWorkspace() {
                   Descartar
                 </button>
               </div>
+            </div>
+          )}
+
+          {uploading && (
+            <div style={{ marginTop: 14 }}>
+              <div className="progress-bar">
+                <div className="progress-bar-fill" style={{ width: `${uploadPct}%` }} />
+              </div>
+              <p className="hint" style={{ marginTop: 6 }}>
+                Enviando… {uploadPct}%
+              </p>
             </div>
           )}
 

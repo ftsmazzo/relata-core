@@ -2,6 +2,7 @@ import { z } from "zod";
 
 export const RecordingStatus = z.enum([
   "recording",
+  "uploading",
   "uploaded",
   "transcribing",
   "transcribed",

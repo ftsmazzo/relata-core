@@ -36,6 +36,7 @@ export const recordings = pgTable("recordings", {
   status: text("status", {
     enum: [
       "recording",
+      "uploading",
       "uploaded",
       "transcribing",
       "transcribed",

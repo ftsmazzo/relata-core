@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm, stat, writeFile, appendFile } from "node:fs/promises";
 import path from "node:path";
 
 const MIN_CHUNK_BYTES = 2000;
@@ -28,6 +28,40 @@ export async function saveOriginalAudio(
   await mkdir(dir, { recursive: true });
   const filePath = path.join(dir, `original.${extFromMime(mimeType)}`);
   await writeFile(filePath, Buffer.from(audioBase64, "base64"));
+  return filePath;
+}
+
+function uploadPartsDir(recordingId: string): string {
+  return path.join(recordingDir(recordingId), "upload-parts");
+}
+
+export async function saveUploadChunk(
+  recordingId: string,
+  index: number,
+  dataBase64: string,
+): Promise<void> {
+  const dir = uploadPartsDir(recordingId);
+  await mkdir(dir, { recursive: true });
+  const partPath = path.join(dir, `part-${String(index).padStart(5, "0")}`);
+  await writeFile(partPath, Buffer.from(dataBase64, "base64"));
+}
+
+export async function assembleUploadedChunks(
+  recordingId: string,
+  mimeType: string,
+): Promise<string> {
+  const dir = uploadPartsDir(recordingId);
+  const parts = (await readdir(dir)).filter((f) => f.startsWith("part-")).sort();
+  if (parts.length === 0) throw new Error("Nenhum pedaço de áudio recebido");
+
+  const finalDir = recordingDir(recordingId);
+  await mkdir(finalDir, { recursive: true });
+  const filePath = path.join(finalDir, `original.${extFromMime(mimeType)}`);
+  await writeFile(filePath, Buffer.alloc(0));
+  for (const part of parts) {
+    await appendFile(filePath, await readFile(path.join(dir, part)));
+  }
+  await rm(dir, { recursive: true, force: true });
   return filePath;
 }
 
