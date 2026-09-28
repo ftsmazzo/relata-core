@@ -3,6 +3,8 @@ export interface Project {
   name: string;
   slug: string;
   createdAt: string;
+  accessToken?: string | null;
+  recordingsCount?: number;
 }
 
 export interface ProjectConfig {

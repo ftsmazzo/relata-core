@@ -141,9 +141,19 @@ export default function AdminProjects() {
           <div key={p.id} className="project-card">
             <div>
               <div style={{ fontWeight: 600 }}>{p.name}</div>
-              <div className="hint">{p.slug}</div>
+              <div className="hint" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                {p.slug}
+                <span className="tag">
+                  {p.recordingsCount ?? 0} {p.recordingsCount === 1 ? "gravação" : "gravações"}
+                </span>
+              </div>
             </div>
             <div style={{ display: "flex", gap: 8 }}>
+              {p.accessToken && (
+                <Link to={`/p/${p.slug}?t=${p.accessToken}`}>
+                  <button>Portal</button>
+                </Link>
+              )}
               <Link to={`/admin/p/${p.slug}/config`}>
                 <button style={{ background: "transparent", border: "1px solid var(--border)", color: "var(--text)" }}>
                   Configurações

@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { db } from "../db/client.js";
-import { projects } from "../db/schema.js";
+import { projects, projectTokens, recordings } from "../db/schema.js";
 import {
   createProjectWithTokens,
   getActiveTokensForProject,
@@ -24,7 +24,26 @@ export async function adminRoutes(app: FastifyInstance) {
 
   app.get("/api/v1/admin/projects", async () => {
     const rows = await db.select().from(projects).orderBy(projects.createdAt);
-    return { projects: rows };
+
+    const tokenRows = await db
+      .select({ projectId: projectTokens.projectId, tokenPlain: projectTokens.tokenPlain })
+      .from(projectTokens)
+      .where(and(eq(projectTokens.kind, "access"), isNull(projectTokens.revokedAt)));
+    const tokenByProject = new Map(tokenRows.map((t) => [t.projectId, t.tokenPlain]));
+
+    const countRows = await db
+      .select({ projectId: recordings.projectId, count: sql<number>`count(*)::int` })
+      .from(recordings)
+      .groupBy(recordings.projectId);
+    const countByProject = new Map(countRows.map((c) => [c.projectId, c.count]));
+
+    return {
+      projects: rows.map((p) => ({
+        ...p,
+        accessToken: tokenByProject.get(p.id) ?? null,
+        recordingsCount: countByProject.get(p.id) ?? 0,
+      })),
+    };
   });
 
   app.post("/api/v1/admin/projects", async (req, reply) => {
