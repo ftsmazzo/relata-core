@@ -61,10 +61,14 @@ async function main() {
     app.log.error({ err }, "falha ao rodar migrations");
   }
 
-  await resumeStuckRecordings(app);
-
   const port = Number(process.env.PORT ?? 3000);
   await app.listen({ port, host: "0.0.0.0" });
+
+  try {
+    await resumeStuckRecordings(app);
+  } catch (err) {
+    app.log.error({ err }, "falha ao retomar gravações pendentes");
+  }
 }
 
 function guessType(filePath: string): string {
