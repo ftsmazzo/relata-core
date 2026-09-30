@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
-import { createRecordingChunked, listRecordings, whoami, type Recording } from "../api.js";
+import { createRecordingChunked, deleteRecording, listRecordings, whoami, type Recording } from "../api.js";
 import Mark from "../components/Mark.js";
 
 const STATUS_LABEL: Record<string, string> = {
@@ -35,6 +35,7 @@ export default function ProjectWorkspace() {
   const [seconds, setSeconds] = useState(0);
   const [uploading, setUploading] = useState(false);
   const [uploadPct, setUploadPct] = useState(0);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const recordedBlobRef = useRef<Blob | null>(null);
@@ -188,21 +189,48 @@ export default function ProjectWorkspace() {
         {recordings === null && <div className="empty-state">Carregando…</div>}
         {recordings?.length === 0 && <div className="empty-state">Nenhuma gravação ainda.</div>}
         {recordings?.map((r) => (
-          <Link
-            key={r.id}
-            to={`/p/${slug}/r/${r.id}?t=${t}`}
-            className="project-card"
-            style={{ textDecoration: "none", color: "inherit" }}
-          >
-            <div>
+          <div key={r.id} className="project-card">
+            <Link
+              to={`/p/${slug}/r/${r.id}?t=${t}`}
+              style={{ textDecoration: "none", color: "inherit", flex: 1 }}
+            >
               <div style={{ fontWeight: 600 }}>{r.title ?? new Date(r.createdAt).toLocaleString("pt-BR")}</div>
               <div className="hint">
                 {r.durationSeconds ? formatTimer(r.durationSeconds) : "—"} ·{" "}
                 {new Date(r.createdAt).toLocaleString("pt-BR")}
               </div>
+            </Link>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span className={`tag tag-${r.status}`}>{STATUS_LABEL[r.status] ?? r.status}</span>
+              {confirmDeleteId === r.id ? (
+                <>
+                  <button
+                    style={{ background: "var(--danger)", color: "#fff", padding: "3px 10px", fontSize: 12 }}
+                    onClick={async () => {
+                      await deleteRecording(r.id);
+                      setConfirmDeleteId(null);
+                      load();
+                    }}
+                  >
+                    Confirmar
+                  </button>
+                  <button
+                    style={{ background: "transparent", border: "1px solid var(--border)", color: "var(--text)", padding: "3px 10px", fontSize: 12 }}
+                    onClick={() => setConfirmDeleteId(null)}
+                  >
+                    Cancelar
+                  </button>
+                </>
+              ) : (
+                <button
+                  style={{ background: "transparent", border: "1px solid var(--border)", color: "var(--danger)", padding: "3px 10px", fontSize: 12 }}
+                  onClick={() => setConfirmDeleteId(r.id)}
+                >
+                  Apagar
+                </button>
+              )}
             </div>
-            <span className={`tag tag-${r.status}`}>{STATUS_LABEL[r.status] ?? r.status}</span>
-          </Link>
+          </div>
         ))}
       </div>
     </div>

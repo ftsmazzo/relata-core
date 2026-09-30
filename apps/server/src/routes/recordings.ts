@@ -145,6 +145,15 @@ export async function recordingsRoutes(app: FastifyInstance) {
     return full;
   });
 
+  app.delete("/api/v1/recordings/:id", async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const [recording] = await db.select().from(recordings).where(eq(recordings.id, id));
+    if (!recording || recording.projectId !== req.project!.id) return reply.code(404).send({ error: "not_found" });
+
+    await db.delete(recordings).where(eq(recordings.id, id));
+    return { ok: true };
+  });
+
   app.post("/api/v1/recordings/:id/retry", async (req, reply) => {
     const { id } = req.params as { id: string };
     const body = (req.body as { stage?: "transcription" | "briefing" }) ?? {};

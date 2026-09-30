@@ -63,7 +63,13 @@ export function createRecording(input: {
   });
 }
 
-const UPLOAD_CHUNK_BYTES = 4 * 1024 * 1024;
+// Pequeno de propósito: em produção, um pedaço de 4MB sozinho já levou mais
+// de 60s numa conexão de upload lenta e foi cortado pelo timeout do proxy
+// (confirmado nos logs — "aborted"/ECONNRESET bem nos 60.0s). 512KB dá
+// margem confortável mesmo numa conexão bem ruim.
+const UPLOAD_CHUNK_BYTES = 512 * 1024;
+const CHUNK_TIMEOUT_MS = 25_000;
+const MAX_ATTEMPTS_PER_CHUNK = 4;
 
 function blobToBase64(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -74,11 +80,25 @@ function blobToBase64(blob: Blob): Promise<string> {
   });
 }
 
+async function apiFetchWithTimeout<T>(path: string, init: RequestInit, timeoutMs: number): Promise<T> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await apiFetch<T>(path, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 /**
- * Sobe o áudio em pedaços de poucos MB, cada um numa requisição própria —
- * evita que um único POST muito grande estoure o timeout do proxy em
- * conexões de upload lentas (é o que causava "Falha ao enviar áudio" sem
- * detalhe nenhum em áudios de dezenas de MB).
+ * Sobe o áudio em pedaços pequenos, cada um numa requisição própria com
+ * timeout curto e retry — evita que uma requisição grande (ou lenta demais)
+ * estoure o timeout do proxy reverso em conexões de upload ruins (era o que
+ * causava "Falha ao enviar áudio" em áudios de dezenas de MB).
  */
 export async function createRecordingChunked(
   input: { source: "live" | "upload"; title?: string; mimeType: string; blob: Blob },
@@ -95,16 +115,38 @@ export async function createRecordingChunked(
   for (let offset = 0; offset < total; offset += UPLOAD_CHUNK_BYTES) {
     const slice = input.blob.slice(offset, offset + UPLOAD_CHUNK_BYTES);
     const dataBase64 = await blobToBase64(slice);
-    await apiFetch(`/api/v1/recordings/${created.id}/audio-chunk`, {
-      method: "POST",
-      body: JSON.stringify({ index, dataBase64 }),
-    });
+
+    let lastError: unknown;
+    let ok = false;
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS_PER_CHUNK && !ok; attempt++) {
+      try {
+        await apiFetchWithTimeout(
+          `/api/v1/recordings/${created.id}/audio-chunk`,
+          { method: "POST", body: JSON.stringify({ index, dataBase64 }) },
+          CHUNK_TIMEOUT_MS,
+        );
+        ok = true;
+      } catch (err) {
+        lastError = err;
+        if (attempt < MAX_ATTEMPTS_PER_CHUNK) await sleep(1000 * attempt);
+      }
+    }
+    if (!ok) {
+      throw lastError instanceof Error
+        ? lastError
+        : new Error(`Falha ao enviar o pedaço ${index} do áudio.`);
+    }
+
     index += 1;
     sent += slice.size;
     onProgress?.(sent, total);
   }
 
   return apiFetch<Recording>(`/api/v1/recordings/${created.id}/complete-upload`, { method: "POST" });
+}
+
+export function deleteRecording(id: string) {
+  return apiFetch<{ ok: true }>(`/api/v1/recordings/${id}`, { method: "DELETE" });
 }
 
 export function updateBriefingDraft(id: string, text: string) {
