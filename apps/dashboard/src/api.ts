@@ -68,7 +68,11 @@ export function createRecording(input: {
 // (confirmado nos logs — "aborted"/ECONNRESET bem nos 60.0s). 512KB dá
 // margem confortável mesmo numa conexão bem ruim.
 const UPLOAD_CHUNK_BYTES = 512 * 1024;
-const CHUNK_TIMEOUT_MS = 25_000;
+// Testado com uma conexão bem lenta simulada (~16KB/s efetivo): um pedaço de
+// 512KB levou 43.7s e ainda assim terminou certo. 25s cortaria isso no meio
+// sem necessidade. 50s dá margem real pra conexão ruim, ainda ficando abaixo
+// do corte duro de 60s do proxy.
+const CHUNK_TIMEOUT_MS = 50_000;
 const MAX_ATTEMPTS_PER_CHUNK = 4;
 
 function blobToBase64(blob: Blob): Promise<string> {
