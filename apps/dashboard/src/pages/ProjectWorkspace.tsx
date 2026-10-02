@@ -57,27 +57,66 @@ export default function ProjectWorkspace() {
   }, [slug]);
 
   async function startRecording() {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    chunksRef.current = [];
-    const recorder = new MediaRecorder(stream);
-    recorder.ondataavailable = (e) => {
-      if (e.data.size > 0) chunksRef.current.push(e.data);
-    };
-    recorder.onstop = () => {
-      recordedBlobRef.current = new Blob(chunksRef.current, { type: recorder.mimeType });
+    setError("");
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+      setError(
+        "Este navegador não permite gravar áudio aqui (precisa de HTTPS e de um navegador com suporte a gravação). Use o envio de arquivo abaixo.",
+      );
+      return;
+    }
+
+    let stream: MediaStream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch (err) {
+      const name = err instanceof DOMException ? err.name : "";
+      if (name === "NotAllowedError" || name === "SecurityError") {
+        setError(
+          "O navegador bloqueou o microfone. Clique no cadeado ao lado do endereço, permita o Microfone para este site e tente de novo.",
+        );
+      } else if (name === "NotFoundError" || name === "OverconstrainedError") {
+        setError("Nenhum microfone encontrado neste dispositivo.");
+      } else if (name === "NotReadableError") {
+        setError("O microfone está em uso por outro app. Feche o outro app e tente de novo.");
+      } else {
+        setError(`Não foi possível acessar o microfone: ${err instanceof Error ? err.message : String(err)}`);
+      }
+      return;
+    }
+
+    try {
+      chunksRef.current = [];
+      const preferred = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg;codecs=opus"];
+      const mimeType = preferred.find((m) => MediaRecorder.isTypeSupported(m));
+      const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunksRef.current.push(e.data);
+      };
+      recorder.onstop = () => {
+        recordedBlobRef.current = new Blob(chunksRef.current, { type: recorder.mimeType });
+        stream.getTracks().forEach((t) => t.stop());
+        setRecorderState("stopped");
+      };
+      recorder.onerror = () => {
+        stream.getTracks().forEach((t) => t.stop());
+        if (timerRef.current) window.clearInterval(timerRef.current);
+        setRecorderState("idle");
+        setError("Ocorreu um erro durante a gravação. Tente de novo.");
+      };
+      recorder.start(1000);
+      mediaRecorderRef.current = recorder;
+      setSeconds(0);
+      setRecorderState("recording");
+      timerRef.current = window.setInterval(() => setSeconds((s) => s + 1), 1000);
+    } catch (err) {
       stream.getTracks().forEach((t) => t.stop());
-    };
-    recorder.start();
-    mediaRecorderRef.current = recorder;
-    setSeconds(0);
-    setRecorderState("recording");
-    timerRef.current = window.setInterval(() => setSeconds((s) => s + 1), 1000);
+      setError(`Não foi possível iniciar a gravação: ${err instanceof Error ? err.message : String(err)}`);
+    }
   }
 
   function stopRecording() {
-    mediaRecorderRef.current?.stop();
     if (timerRef.current) window.clearInterval(timerRef.current);
-    setRecorderState("stopped");
+    mediaRecorderRef.current?.stop();
   }
 
   async function sendRecording(blob: Blob, source: "live" | "upload", mimeType: string) {
